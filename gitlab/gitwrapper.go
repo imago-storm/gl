@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/xanzy/go-gitlab"
 )
 
 type repoWrapper struct {
@@ -36,180 +37,28 @@ func OpenRepositoryCwd() (repoWrapper, error) {
 	return OpenRepository(path)
 }
 
-func OpenRemote(path string) error {
-	r, err := git.PlainOpen(path)
-
+func (repo repoWrapper) OpenRemoteURL() error {
+	site, project, err := repo.getRemoteData()
 	if err != nil {
 		return err
 	}
-
-	log.Println("Remotes", r)
-
-	list, err := r.Remotes()
-	if err != nil {
-		return err
-	}
-
-	// git@gitlab.com:925043/cool-project.git
-
-	for _, r := range list {
-		log.Println("Remote name: ", r.Config().Name)
-
-		for _, url := range r.Config().URLs {
-			log.Println("URL: ", url)
-			parts := strings.Split(url, "@")
-			if len(parts) != 2 {
-				return errors.New("Wrong tokenization of URL: " + url)
-			}
-			url = parts[1]
-
-			url = string(regexp.MustCompile(`\.git$`).ReplaceAll([]byte(url), []byte("")))
-			log.Println(url)
-
-			parts = strings.Split(url, `:`)
-			if len(parts) != 2 {
-				return errors.New("Wrong tokenization of URL: " + url)
-			}
-			gitlabSite := parts[0]
-			project := parts[1]
-
-			repositoryUrl := fmt.Sprintf("https://%s/%s", gitlabSite, project)
-			log.Println("Remote: ", repositoryUrl)
-
-			openBrowser(repositoryUrl)
-		}
-	}
-
-	return nil
+	repositoryURL := fmt.Sprintf("https://%s/%s", site, project)
+	log.Printf("Remote repository URL: %s", repositoryURL)
+	return OpenBrowser(repositoryURL)
 }
 
-// func GetProjectName(path string) (string, error) {
-// 	r, err := git.PlainOpen(path)
-
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	list, err := r.Remotes()
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	// git@gitlab.com:925043/cool-project.git
-
-// 	for _, r := range list {
-// 		log.Println("Remote name: ", r.Config().Name)
-
-// 		for _, url := range r.Config().URLs {
-// 			log.Println("URL: ", url)
-// 			parts := strings.Split(url, "@")
-// 			if len(parts) != 2 {
-// 				return "", errors.New("Wrong tokenization of URL: " + url)
-// 			}
-// 			url = parts[1]
-
-// 			url = string(regexp.MustCompile(`\.git$`).ReplaceAll([]byte(url), []byte("")))
-// 			log.Println(url)
-
-// 			parts = strings.Split(url, `:`)
-// 			if len(parts) != 2 {
-// 				return "", errors.New("Wrong tokenization of URL: " + url)
-// 			}
-// 			// gitlabSite := parts[0]
-
-// 			project := parts[1]
-// 			// todo default remote
-// 			return project, nil
-// 		}
-// 	}
-// 	return "", errors.New("No remotes found")
-// }
-
-// func OpenCurrentMergeRequest(path string) error {
-// 	r, err := git.PlainOpen(path)
-
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	ref, err := r.Head()
-// 	if err != nil {
-// 		return err
-// 	}
-// 	log.Println(ref.Target())
-// 	log.Println(ref.Name())
-
-// 	log.Println("Ref: ", ref)
-// 	s := strings.Split(ref.Name().String(), "/")
-// 	branch := s[2]
-// 	log.Println("branch: ", s[2])
-
-// 	projectName, err := GetProjectName(path)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	gitlab, err := WrapperFromSettings()
-// 	url, err := gitlab.GetMergeRequestURL(projectName, branch)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	openBrowser(url)
-// 	return nil
-// }
-
-// func CreateMergeRequest(path string) error {
-// 	r, err := git.PlainOpen(path)
-
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	ref, err := r.Head()
-// 	if err != nil {
-// 		return err
-// 	}
-// 	log.Println(ref.Target())
-// 	log.Println(ref.Name())
-
-// 	log.Println("Ref: ", ref)
-// 	s := strings.Split(ref.Name().String(), "/")
-// 	branch := s[2]
-// 	log.Println("branch: ", s[2])
-
-// 	projectName, err := GetProjectName(path)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	gitlab, err := WrapperFromSettings()
-// 	if err != nil {
-// 		return err
-// 	}
-// 	log.Println(gitlab)
-// 	log.Println("Found project ", projectName)
-// 	err = gitlab.CreateMergeRequest(projectName, branch)
-
-// 	return err
-// }
-
-func (wrapper repoWrapper) getProjectName() (string, error) {
-	list, err := wrapper.Repository.Remotes()
+func (repo repoWrapper) getRemoteData() (string, string, error) {
+	list, err := repo.Repository.Remotes()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	// git@gitlab.com:925043/cool-project.git
-
 	for _, r := range list {
-		log.Println("Remote name: ", r.Config().Name)
-
 		for _, url := range r.Config().URLs {
-			log.Println("URL: ", url)
+
 			parts := strings.Split(url, "@")
 			if len(parts) != 2 {
-				return "", errors.New("Wrong tokenization of URL: " + url)
+				return "", "", errors.New("Wrong tokenization of URL: " + url)
 			}
 			url = parts[1]
 
@@ -218,41 +67,39 @@ func (wrapper repoWrapper) getProjectName() (string, error) {
 
 			parts = strings.Split(url, `:`)
 			if len(parts) != 2 {
-				return "", errors.New("Wrong tokenization of URL: " + url)
+				return "", "", errors.New("Wrong tokenization of URL: " + url)
 			}
-			// gitlabSite := parts[0]
+			gitlabSite := parts[0]
 
 			project := parts[1]
 			// todo default remote
-			return project, nil
+			return gitlabSite, project, nil
 		}
 	}
-	return "", errors.New("No remotes found")
+	return "", "", errors.New("No remotes found")
 }
 
-func (wrapper repoWrapper) CreateMergeRequest() error {
-	branch, err := wrapper.getCurrentBranch()
+func (repo repoWrapper) CreateMergeRequest() (*gitlab.MergeRequest, error) {
+	branch, err := repo.getCurrentBranch()
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	projectName, err := wrapper.getProjectName()
+	_, projectName, err := repo.getRemoteData()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	gitlab, err := WrapperFromSettings()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = gitlab.CreateMergeRequest(projectName, branch)
-
-	return err
+	return gitlab.CreateMergeRequest(projectName, branch)
 }
 
 func (repo repoWrapper) OpenMergeRequest() error {
-	project, err := repo.getProjectName()
+	_, project, err := repo.getRemoteData()
 	if err != nil {
 		return err
 	}
@@ -267,12 +114,12 @@ func (repo repoWrapper) OpenMergeRequest() error {
 		return err
 	}
 
-	openBrowser(url)
+	OpenBrowser(url)
 	return nil
 }
 
-func (wrapper repoWrapper) getCurrentBranch() (string, error) {
-	ref, err := wrapper.Repository.Head()
+func (repo repoWrapper) getCurrentBranch() (string, error) {
+	ref, err := repo.Repository.Head()
 	if err != nil {
 		return "", err
 	}
@@ -283,7 +130,7 @@ func (wrapper repoWrapper) getCurrentBranch() (string, error) {
 	return s[2], nil
 }
 
-func openBrowser(url string) error {
+func OpenBrowser(url string) error {
 	var err error
 
 	switch runtime.GOOS {

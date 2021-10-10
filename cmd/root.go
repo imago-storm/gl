@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/imago-storm/gl/gitlab"
@@ -40,14 +39,18 @@ var mrCmd = &cobra.Command{
 var createMrCmd = &cobra.Command{
 	Use: "create",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Calculate branch
-		// Look for open mr
-		path, err := os.Getwd()
+		repo, err := gitlab.OpenRepositoryCwd()
 		if err != nil {
 			return err
 		}
-		repo, err := gitlab.OpenRepository(path)
-		err = repo.CreateMergeRequest()
+		open, _ := cmd.Flags().GetBool("open")
+		mr, err := repo.CreateMergeRequest()
+		if err != nil {
+			return err
+		}
+		if open {
+			gitlab.OpenBrowser(mr.WebURL)
+		}
 		return err
 	},
 }
@@ -67,15 +70,12 @@ var openMrCmd = &cobra.Command{
 var repoOpenCmd = &cobra.Command{
 	Use: "open",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		path, err := os.Getwd()
+
+		repo, err := gitlab.OpenRepositoryCwd()
 		if err != nil {
 			return err
 		}
-		log.Println("Current path: ", path)
-		if err := gitlab.OpenRemote(path); err != nil {
-			return err
-		}
-		return nil
+		return repo.OpenRemoteURL()
 	},
 }
 

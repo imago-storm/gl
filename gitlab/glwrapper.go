@@ -131,12 +131,12 @@ func (wrapper gitlabWrapper) GetMergeRequestURL(project string, source string) (
 	return "", errors.New("No merge requests found")
 }
 
-func (wrapper gitlabWrapper) CreateMergeRequest(project string, source string) error {
+func (wrapper gitlabWrapper) CreateMergeRequest(project string, source string) (*gitlab.MergeRequest, error) {
 	git := wrapper.Client
 
 	p, _, err := git.Projects.GetProject(project, &gitlab.GetProjectOptions{})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	log.Printf("Default branch: %s", p.DefaultBranch)
 
@@ -150,13 +150,13 @@ func (wrapper gitlabWrapper) CreateMergeRequest(project string, source string) e
 		log.Println("The merge request already exists")
 		mr := mrs[0]
 		log.Println(mr.WebURL)
-		return fmt.Errorf("The merge request already exists: %s", mr.WebURL)
+		return nil, fmt.Errorf("The merge request already exists: %s", mr.WebURL)
 	}
 
 	branch, _, err := git.Branches.GetBranch(project, source)
 	if err != nil {
 		log.Fatalf("Failed to fetch branch %s", source)
-		return err
+		return nil, err
 	}
 	commit := branch.Commit
 	log.Printf("Found commit message: %s", commit.Message)
@@ -171,5 +171,5 @@ func (wrapper gitlabWrapper) CreateMergeRequest(project string, source string) e
 		log.Fatal("Failed to create merge request: ", err)
 	}
 	log.Printf("Created merge request: %s", mr.WebURL)
-	return nil
+	return mr, nil
 }
