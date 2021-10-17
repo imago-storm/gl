@@ -43,8 +43,9 @@ var createMrCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		open, _ := cmd.Flags().GetBool("open")
-		mr, err := repo.CreateMergeRequest()
+		open, _ := cmd.Flags().GetBool("view")
+		branch, _ := cmd.Flags().GetString("branch")
+		mr, err := repo.CreateMergeRequest(&gitlab.CreateMergeRequest{Branch: &branch})
 		if err != nil {
 			return err
 		}
@@ -56,7 +57,7 @@ var createMrCmd = &cobra.Command{
 }
 
 var openMrCmd = &cobra.Command{
-	Use: "open",
+	Use: "view",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		repo, err := gitlab.OpenRepositoryCwd()
 		if err != nil {
@@ -68,7 +69,7 @@ var openMrCmd = &cobra.Command{
 }
 
 var repoOpenCmd = &cobra.Command{
-	Use: "open",
+	Use: "view",
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		repo, err := gitlab.OpenRepositoryCwd()
@@ -91,7 +92,11 @@ func init() {
 	// cobra.OnInitialize()
 
 	repoCmd.AddCommand(repoOpenCmd)
+
+	createMrCmd.PersistentFlags().Bool("view", false, "Open created MR immediately in your browser")
+	createMrCmd.PersistentFlags().String("branch", "master", "Base branch to create MR to (default repository branch by default)")
 	mrCmd.AddCommand(createMrCmd)
+
 	mrCmd.AddCommand(openMrCmd)
 
 	rootCmd.AddCommand(repoCmd)

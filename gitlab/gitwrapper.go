@@ -18,6 +18,10 @@ type repoWrapper struct {
 	Repository *git.Repository
 }
 
+type CreateMergeRequest struct {
+	Branch *string
+}
+
 func OpenRepository(path string) (repoWrapper, error) {
 	r, err := git.PlainOpen(path)
 	wrapper := repoWrapper{}
@@ -79,7 +83,7 @@ func (repo repoWrapper) getRemoteData() (string, string, error) {
 	return "", "", errors.New("No remotes found")
 }
 
-func (repo repoWrapper) CreateMergeRequest() (*gitlab.MergeRequest, error) {
+func (repo repoWrapper) CreateMergeRequest(options *CreateMergeRequest) (*gitlab.MergeRequest, error) {
 	branch, err := repo.getCurrentBranch()
 
 	if err != nil {
@@ -95,7 +99,7 @@ func (repo repoWrapper) CreateMergeRequest() (*gitlab.MergeRequest, error) {
 	if err != nil {
 		return nil, err
 	}
-	return gitlab.CreateMergeRequest(projectName, branch)
+	return gitlab.CreateMergeRequest(&CreateMergeRequestOptions{Project: &projectName, SourceBranch: &branch, Branch: options.Branch})
 }
 
 func (repo repoWrapper) OpenMergeRequest() error {
@@ -123,11 +127,15 @@ func (repo repoWrapper) getCurrentBranch() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	log.Println(ref)
 	s := strings.Split(ref.Name().String(), "/")
-	if len(s) != 3 {
+
+	if len(s) < 3 {
 		return "", fmt.Errorf("Invalid reference: %s", ref.Name())
 	}
-	return s[2], nil
+	branchParts := s[2:]
+
+	return strings.Join(branchParts, "/"), nil
 }
 
 func OpenBrowser(url string) error {

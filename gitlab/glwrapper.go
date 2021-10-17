@@ -89,20 +89,6 @@ func (wrapper gitlabWrapper) GetProject(project string) (*gitlab.Project, error)
 	return p, nil
 }
 
-// func (wrapper gitlabWrapper) GetMergeRequests(project string) error {
-// 	git := wrapper.Client
-
-// 	requests, _, err := git.MergeRequests.ListMergeRequests(&gitlab.ListMergeRequestsOptions{
-// 		State: gitlab.String("opened"),
-// 	})
-
-// 	if err != nil {
-// 		return err
-// 	}
-// 	log.Println("requests: ", requests)
-// 	return nil
-// }
-
 func (wrapper gitlabWrapper) GetMergeRequestURL(project string, source string) (string, error) {
 	git := wrapper.Client
 
@@ -131,19 +117,35 @@ func (wrapper gitlabWrapper) GetMergeRequestURL(project string, source string) (
 	return "", errors.New("No merge requests found")
 }
 
-func (wrapper gitlabWrapper) CreateMergeRequest(project string, source string) (*gitlab.MergeRequest, error) {
+type CreateMergeRequestOptions struct {
+	Branch       *string
+	Project      *string
+	SourceBranch *string
+}
+
+func (wrapper gitlabWrapper) CreateMergeRequest(options *CreateMergeRequestOptions) (*gitlab.MergeRequest, error) {
 	git := wrapper.Client
 
-	p, _, err := git.Projects.GetProject(project, &gitlab.GetProjectOptions{})
-	if err != nil {
-		return nil, err
+	project := *options.Project
+	var source string = *options.SourceBranch
+
+	var targetBranchName string
+	if options.Branch != nil {
+		targetBranchName = *options.Branch
+		// todo check if exists
+	} else {
+		p, _, err := git.Projects.GetProject(project, &gitlab.GetProjectOptions{})
+		if err != nil {
+			return nil, err
+		}
+		// log.Printf("Default branch: %s", p.DefaultBranch)
+		targetBranchName = p.DefaultBranch
 	}
-	log.Printf("Default branch: %s", p.DefaultBranch)
 
 	mrs, _, err := git.MergeRequests.ListMergeRequests(&gitlab.ListMergeRequestsOptions{
 		State:        gitlab.String("opened"),
 		SourceBranch: gitlab.String(source),
-		TargetBranch: &p.DefaultBranch,
+		TargetBranch: gitlab.String(targetBranchName),
 	})
 
 	if len(mrs) > 0 {
@@ -161,12 +163,11 @@ func (wrapper gitlabWrapper) CreateMergeRequest(project string, source string) (
 	commit := branch.Commit
 	log.Printf("Found commit message: %s", commit.Message)
 
-	options := &gitlab.CreateMergeRequestOptions{
+	mr, _, err := git.MergeRequests.CreateMergeRequest(project, &gitlab.CreateMergeRequestOptions{
 		SourceBranch: gitlab.String(source),
-		TargetBranch: &p.DefaultBranch,
+		TargetBranch: gitlab.String(targetBranchName),
 		Title:        &commit.Message,
-	}
-	mr, _, err := git.MergeRequests.CreateMergeRequest(project, options)
+	})
 	if err != nil {
 		log.Fatal("Failed to create merge request: ", err)
 	}
