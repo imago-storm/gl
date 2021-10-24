@@ -19,7 +19,9 @@ type repoWrapper struct {
 }
 
 type CreateMergeRequest struct {
-	Branch *string
+	Branch        *string
+	DeleteOnMerge *bool
+	Draft         *bool
 }
 
 func OpenRepository(path string) (repoWrapper, error) {
@@ -90,20 +92,26 @@ func (repo repoWrapper) CreateMergeRequest(options *CreateMergeRequest) (*gitlab
 		return nil, err
 	}
 
-	_, projectName, err := repo.getRemoteData()
+	gitlabSite, projectName, err := repo.getRemoteData()
 	if err != nil {
 		return nil, err
 	}
 
-	gitlab, err := WrapperFromSettings()
+	gitlab, err := WrapperFromSettingsMultipleHosts(gitlabSite)
 	if err != nil {
 		return nil, err
 	}
-	return gitlab.CreateMergeRequest(&CreateMergeRequestOptions{Project: &projectName, SourceBranch: &branch, Branch: options.Branch})
+	return gitlab.CreateMergeRequest(&CreateMergeRequestOptions{
+		Project:       &projectName,
+		SourceBranch:  &branch,
+		Branch:        options.Branch,
+		DeleteOnMerge: options.DeleteOnMerge,
+		Draft:         options.Draft,
+	})
 }
 
 func (repo repoWrapper) OpenMergeRequest() error {
-	_, project, err := repo.getRemoteData()
+	gitlabSite, project, err := repo.getRemoteData()
 	if err != nil {
 		return err
 	}
@@ -112,7 +120,7 @@ func (repo repoWrapper) OpenMergeRequest() error {
 		return err
 	}
 
-	gitlab, err := WrapperFromSettings()
+	gitlab, err := WrapperFromSettingsMultipleHosts(gitlabSite)
 	url, err := gitlab.GetMergeRequestURL(project, branch)
 	if err != nil {
 		return err

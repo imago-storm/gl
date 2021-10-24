@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/xanzy/go-gitlab"
 )
@@ -21,6 +22,63 @@ type WrapperConfig struct {
 	Token string
 }
 
+type MultiHostConfigs struct {
+	Configs []WrapperConfig
+}
+
+func SaveConfig(host string, token string) error {
+	configs, err := ReadWrapperSettingsMultiple()
+
+	if err != nil {
+		configs = &MultiHostConfigs{}
+	}
+
+	configs.Configs = append(configs.Configs, WrapperConfig{URL: "https://" + host, Token: token})
+
+	homedir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	configFile := filepath.Join(homedir, ".gl", "config.json")
+
+	file, err := os.OpenFile(configFile, os.O_CREATE|os.O_WRONLY, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	if err = encoder.Encode(*configs); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ReadWrapperSettingsMultiple() (*MultiHostConfigs, error) {
+	homedir, err := os.UserHomeDir()
+	config := MultiHostConfigs{}
+
+	if err != nil {
+		return nil, err
+	}
+
+	configFile := filepath.Join(homedir, ".gl", "config.json")
+	file, err := os.Open(configFile)
+	if err != nil {
+		log.Println("Failed to open file: ", err)
+		return nil, err
+	}
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&config)
+
+	if err != nil {
+		log.Println("Failed to parse configuration: ", err)
+		return nil, err
+	}
+	return &config, nil
+}
+
 func ReadWrapperSettings() (WrapperConfig, error) {
 	homedir, err := os.UserHomeDir()
 	config := WrapperConfig{}
@@ -31,7 +89,7 @@ func ReadWrapperSettings() (WrapperConfig, error) {
 	configFile := filepath.Join(homedir, "gl.json")
 	file, err := os.Open(configFile)
 	if err != nil {
-		log.Fatal("Failed to open file: ", err)
+		log.Println("Failed to open file: ", err)
 		return config, err
 	}
 	decoder := json.NewDecoder(file)
@@ -39,7 +97,7 @@ func ReadWrapperSettings() (WrapperConfig, error) {
 	err = decoder.Decode(&config)
 
 	if err != nil {
-		log.Fatal("Failed to parse configuration: ", err)
+		log.Println("Failed to parse configuration: ", err)
 		return config, err
 	}
 	return config, nil
@@ -73,12 +131,47 @@ func WrapperFromSettings() (gitlabWrapper, error) {
 	return g, nil
 }
 
+func WrapperFromSettingsMultipleHosts(hostname string) (*gitlabWrapper, error) {
+	homedir, err := os.UserHomeDir()
+	config := MultiHostConfigs{}
+
+	if err != nil {
+		return nil, err
+	}
+
+	configFile := filepath.Join(homedir, ".gl", "config.json")
+	file, err := os.Open(configFile)
+	if err != nil {
+		log.Println("Failed to open file: ", err)
+		return nil, err
+	}
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&config)
+
+	if err != nil {
+		log.Println("Failed to parse configuration: ", err)
+		return nil, err
+	}
+
+	for _, cfg := range config.Configs {
+		if strings.Contains(cfg.URL, hostname) {
+			g, err := NewWrapper(cfg.Token, cfg.URL)
+			if err != nil {
+				return nil, err
+			}
+			return &g, nil
+		}
+	}
+	log.Println("Failed to find configuration for host ", hostname)
+	return nil, errors.New("Failed to find configuration for the provided hostname")
+}
+
 func (wrapper gitlabWrapper) GetProject(project string) (*gitlab.Project, error) {
 	git := wrapper.Client
 	p, _, err := git.Projects.GetProject(project, &gitlab.GetProjectOptions{})
 
 	if err != nil {
-		log.Fatalf("Failed to get proejcts: %v", err)
+		log.Printf("Failed to get proejcts: %v", err)
 		return nil, err
 	}
 
@@ -118,9 +211,11 @@ func (wrapper gitlabWrapper) GetMergeRequestURL(project string, source string) (
 }
 
 type CreateMergeRequestOptions struct {
-	Branch       *string
-	Project      *string
-	SourceBranch *string
+	Branch        *string
+	Project       *string
+	SourceBranch  *string
+	DeleteOnMerge *bool
+	Draft         *bool
 }
 
 func (wrapper gitlabWrapper) CreateMergeRequest(options *CreateMergeRequestOptions) (*gitlab.MergeRequest, error) {
@@ -157,19 +252,26 @@ func (wrapper gitlabWrapper) CreateMergeRequest(options *CreateMergeRequestOptio
 
 	branch, _, err := git.Branches.GetBranch(project, source)
 	if err != nil {
-		log.Fatalf("Failed to fetch branch %s", source)
+		log.Printf("Failed to fetch branch %s", source)
 		return nil, err
 	}
 	commit := branch.Commit
 	log.Printf("Found commit message: %s", commit.Message)
 
+	title := commit.Message
+	if *options.Draft {
+		title = "Draft : " + title
+	}
+
 	mr, _, err := git.MergeRequests.CreateMergeRequest(project, &gitlab.CreateMergeRequestOptions{
-		SourceBranch: gitlab.String(source),
-		TargetBranch: gitlab.String(targetBranchName),
-		Title:        &commit.Message,
+		SourceBranch:       gitlab.String(source),
+		TargetBranch:       gitlab.String(targetBranchName),
+		Title:              gitlab.String(title),
+		RemoveSourceBranch: options.DeleteOnMerge,
 	})
 	if err != nil {
-		log.Fatal("Failed to create merge request: ", err)
+		log.Println("Failed to create merge request: ", err)
+		return nil, err
 	}
 	log.Printf("Created merge request: %s", mr.WebURL)
 	return mr, nil

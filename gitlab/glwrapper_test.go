@@ -1,8 +1,10 @@
 package gitlab
 
 import (
+	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -23,4 +25,15 @@ func TestReadWrapperSettings(t *testing.T) {
 		t.Error("Failed", err)
 	}
 	log.Println(settings)
+}
+
+func TestSaveConfig(t *testing.T) {
+	err := SaveConfig("host", "token")
+	if err != nil {
+		t.Error("Failed", err)
+	}
+
+	homedir, _ := os.UserHomeDir()
+	dat, err := ioutil.ReadFile(filepath.Join(homedir, ".gl", "config.json"))
+	log.Println(dat)
 }

@@ -43,9 +43,20 @@ var createMrCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		open, _ := cmd.Flags().GetBool("view")
+		open, _ := cmd.Flags().GetBool("open")
 		branch, _ := cmd.Flags().GetString("branch")
-		mr, err := repo.CreateMergeRequest(&gitlab.CreateMergeRequest{Branch: &branch})
+		delete, _ := cmd.Flags().GetBool("delete-on-merge")
+		draft, _ := cmd.Flags().GetBool("draft")
+
+		var branchRef *string = nil
+		if branch != "" {
+			branchRef = &branch
+		}
+		mr, err := repo.CreateMergeRequest(&gitlab.CreateMergeRequest{
+			Branch:        branchRef,
+			DeleteOnMerge: &delete,
+			Draft:         &draft,
+		})
 		if err != nil {
 			return err
 		}
@@ -80,6 +91,18 @@ var repoOpenCmd = &cobra.Command{
 	},
 }
 
+var saveConfigCmd = &cobra.Command{
+	Use: "cfg",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// todo read from keyboard
+		hostname, _ := cmd.Flags().GetString("host")
+		token, _ := cmd.Flags().GetString("token")
+
+		err := gitlab.SaveConfig(hostname, token)
+		return err
+	},
+}
+
 func Execute() {
 	// fmt.Println("Command")
 	if err := rootCmd.Execute(); err != nil {
@@ -93,12 +116,19 @@ func init() {
 
 	repoCmd.AddCommand(repoOpenCmd)
 
-	createMrCmd.PersistentFlags().Bool("view", false, "Open created MR immediately in your browser")
-	createMrCmd.PersistentFlags().String("branch", "master", "Base branch to create MR to (default repository branch by default)")
+	createMrCmd.PersistentFlags().Bool("open", false, "Open created MR immediately in your browser")
+	createMrCmd.PersistentFlags().String("branch", "", "Base branch to create MR to (default repository branch by default)")
+	createMrCmd.PersistentFlags().Bool("delete-on-merge", true, "Delete branch on merge")
+	createMrCmd.PersistentFlags().Bool("draft", false, "Mark MR as draft")
+
 	mrCmd.AddCommand(createMrCmd)
 
 	mrCmd.AddCommand(openMrCmd)
 
+	saveConfigCmd.PersistentFlags().String("host", "", "hostname")
+	saveConfigCmd.PersistentFlags().String("token", "", "Token")
+
+	rootCmd.AddCommand(saveConfigCmd)
 	rootCmd.AddCommand(repoCmd)
 	rootCmd.AddCommand(mrCmd)
 }
