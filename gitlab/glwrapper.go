@@ -197,14 +197,17 @@ func (wrapper gitlabWrapper) GetMergeRequestURL(project string, source string) (
 	mrs, _, err := git.MergeRequests.ListMergeRequests(&gitlab.ListMergeRequestsOptions{
 		State:        gitlab.String("opened"),
 		SourceBranch: gitlab.String(source),
-		TargetBranch: &defBranch,
+		// TargetBranch: &defBranch,
 	})
 
 	if mrs != nil {
-		log.Println("The merge request already exists")
-		mr := mrs[0]
-		log.Println(mr.WebURL)
-		return mr.WebURL, nil
+		for _, mr := range mrs {
+			if mr.SourceProjectID == p.ID {
+				log.Println("The merge request already exists")
+				log.Println(mr.WebURL)
+				return mr.WebURL, nil
+			}
+		}
 	}
 
 	return "", errors.New("No merge requests found")
@@ -225,11 +228,15 @@ func (wrapper gitlabWrapper) CreateMergeRequest(options *CreateMergeRequestOptio
 	var source string = *options.SourceBranch
 
 	var targetBranchName string
+	p, _, err := git.Projects.GetProject(project, &gitlab.GetProjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+
 	if options.Branch != nil {
 		targetBranchName = *options.Branch
 		// todo check if exists
 	} else {
-		p, _, err := git.Projects.GetProject(project, &gitlab.GetProjectOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -243,11 +250,13 @@ func (wrapper gitlabWrapper) CreateMergeRequest(options *CreateMergeRequestOptio
 		TargetBranch: gitlab.String(targetBranchName),
 	})
 
-	if len(mrs) > 0 {
-		log.Println("The merge request already exists")
-		mr := mrs[0]
-		log.Println(mr.WebURL)
-		return nil, fmt.Errorf("The merge request already exists: %s", mr.WebURL)
+	for _, mr := range mrs {
+		if mr.TargetProjectID == p.ID {
+			log.Println("The merge request already exists")
+			mr := mrs[0]
+			log.Println(mr.WebURL)
+			return nil, fmt.Errorf("The merge request already exists: %s", mr.WebURL)
+		}
 	}
 
 	branch, _, err := git.Branches.GetBranch(project, source)

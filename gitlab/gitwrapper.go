@@ -25,9 +25,10 @@ type CreateMergeRequest struct {
 }
 
 func OpenRepository(path string) (repoWrapper, error) {
-	r, err := git.PlainOpen(path)
+	r, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: true})
 	wrapper := repoWrapper{}
 	if err != nil {
+		log.Println("Failed to open repository on " + path)
 		return wrapper, err
 	}
 
@@ -78,6 +79,7 @@ func (repo repoWrapper) getRemoteData() (string, string, error) {
 			gitlabSite := parts[0]
 
 			project := parts[1]
+			log.Println("Project: " + project)
 			// todo default remote
 			return gitlabSite, project, nil
 		}
@@ -112,6 +114,9 @@ func (repo repoWrapper) CreateMergeRequest(options *CreateMergeRequest) (*gitlab
 
 func (repo repoWrapper) OpenMergeRequest() error {
 	gitlabSite, project, err := repo.getRemoteData()
+
+	log.Println("Working with project: " + project)
+
 	if err != nil {
 		return err
 	}
