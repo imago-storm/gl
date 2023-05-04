@@ -267,9 +267,10 @@ func (wrapper gitlabWrapper) CreateMergeRequest(options *CreateMergeRequestOptio
 	commit := branch.Commit
 	log.Printf("Found commit message: %s", commit.Message)
 
-	title := commit.Message
+	title := "Resolve " + branch.Name
+	log.Printf("Title: " + title)
 	if *options.Draft {
-		title = "Draft : " + title
+		title = "Draft: " + title
 	}
 
 	mr, _, err := git.MergeRequests.CreateMergeRequest(project, &gitlab.CreateMergeRequestOptions{
